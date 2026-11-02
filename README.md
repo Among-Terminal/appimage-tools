@@ -92,5 +92,6 @@ a new release.
    The AppImage build in that PR's CI is the check of the new version.
 
 `verify-release.sh` checks the file list, the pinned values, every license text and the bytes at each
-pinned address. A release is verified from its own tag, since pins and `NOTICE.md` change later; the
-script refuses another checkout. Old releases keep working: `among` is pinned to its own tag.
+pinned address. A release is verified from its own commit, since pins and `NOTICE.md` change later;
+the script refuses another commit and a checkout with local changes. Old releases keep working:
+`among` is pinned to its own tag.

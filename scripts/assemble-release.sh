@@ -38,12 +38,18 @@ mkdir -p "$cache"
 fetch() {
     local url="$1" sha256="$2" target="$3"
     local cached="$cache/$sha256"
+    # Hashing before the rename keeps wrong bytes out of the cache, so a rerun
+    # downloads again instead of tripping over the same bad file.
     if [[ ! -s "$cached" ]]; then
         curl --fail --location --silent --show-error --retry 3 --proto '=https' \
             --proto-redir '=https' --output "$cached.part" "$url"
+        if ! printf '%s  %s\n' "$sha256" "$cached.part" | sha256sum --check --status; then
+            rm -f "$cached.part"
+            echo "bytes differ from the pin: $url" >&2
+            exit 1
+        fi
         mv "$cached.part" "$cached"
-    fi
-    if ! printf '%s  %s\n' "$sha256" "$cached" | sha256sum --check --status; then
+    elif ! printf '%s  %s\n' "$sha256" "$cached" | sha256sum --check --status; then
         echo "bytes differ from the pin: $url" >&2
         exit 1
     fi
@@ -52,11 +58,14 @@ fetch() {
 }
 
 # Order, owner, time and mode are all fixed, so the same inputs give the same
-# asset bytes whatever the umask and the modes of the download cache.
+# asset bytes whatever the umask and the modes of the cache and the checkout.
+# Modes are set here because tar's own --mode keeps an existing execute bit.
 pack() {
     local directory="$1" name="$2" output="$3"
+    find "$directory/$name" -type d -exec chmod 0755 {} +
+    find "$directory/$name" -type f -exec chmod 0644 {} +
     tar --create --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 \
-        --mode=u=rwX,go=rX --format=gnu --directory "$directory" --file "$output" "$name"
+        --format=gnu --directory "$directory" --file "$output" "$name"
 }
 
 while IFS=$'\t' read -r asset url _repository _tag _commit sha256 _published; do

@@ -7,7 +7,7 @@ the texts are provided separately in `licenses.tar.gz`, and the corresponding so
 
 Source code offer. Source code for the GPL and LGPL components is provided together with the
 binaries from the same place: `sources.tar` of the same release. It also holds the components in the
-tables below, except the Alpine 3.21 zlib, which is permissive and named at the end of this file.
+tables below, except the Alpine 3.21 zlib, which is permissive; see the `runtime-*` section.
 Build scripts are in the project repositories (`ci/`, `scripts/`), and Alpine and Debian
 patches sit next to the source archives. Directories inside `sources.tar`:
 
@@ -16,7 +16,8 @@ patches sit next to the source archives. Directories inside `sources.tar`:
   snapshot.debian.org snapshot of 2025-11-07;
 - `alpine-3.19/`, `alpine-3.21/`: archives from distfiles.alpinelinux.org. Alpine 3.19 also has the
   aports build files (commit `838df6872ddf3260a834ad304c71f5e03901bb06`, branch `3.19-stable`).
-  Alpine 3.21 has none: its packages here (musl, zstd, mimalloc) are permissive.
+  Alpine 3.21 has the build files of gcc only (commit `8f01bd5af18e4f66b7df105bdd7cab10de2ee1fa`,
+  branch `3.21-stable`); its other packages here (musl, zstd, mimalloc) are permissive.
 
 ## linuxdeploy (`linuxdeploy-*.AppImage`, tag `1-alpha-20251107-1`)
 
@@ -101,6 +102,7 @@ Every AppImage image starts with type2-runtime. These are different builds of on
 | musl | 1.2.5-r11 | MIT |
 | zstd | 1.5.6-r2 | BSD-3-Clause or GPL-2.0-only |
 | zlib | the log shows 1.3.2-r1 for `fedfad5` | Zlib |
+| libgcc, aarch64 builds only | gcc 14.2.0-r4 | GPL-3.0 with GCC Runtime Library Exception |
 
 Alpine versions are taken from the `fedfad5` build log. The build logs of `caf24f9` and `61e6688`
 have already been deleted on GitHub, so the revisions of their Alpine 3.21 packages are unconfirmed.

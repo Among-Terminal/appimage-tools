@@ -23,9 +23,17 @@ if [[ -e "$target" ]]; then
     echo "destination must be new: $target" >&2
     exit 1
 fi
-tagged="$(git -C "$root" rev-parse --quiet --verify "refs/tags/$tag^{commit}" || true)"
-if [[ -n "$tagged" && "$tagged" != "$(git -C "$root" rev-parse HEAD)" ]]; then
-    echo "run this from the tag: git fetch --tags && git checkout $tag" >&2
+if [[ -n "$(git -C "$root" status --porcelain)" ]]; then
+    echo "the checkout has local changes" >&2
+    exit 1
+fi
+expected_commit="$(gh release view "$tag" --repo "$repository" --json targetCommitish \
+    --jq .targetCommitish)"
+if [[ ! "$expected_commit" =~ ^[0-9a-f]{40}$ ]]; then
+    expected_commit="$(gh api "repos/$repository/commits/refs/tags/$tag" --jq .sha)"
+fi
+if [[ "$expected_commit" != "$(git -C "$root" rev-parse HEAD)" ]]; then
+    echo "run this from the commit of $tag: git checkout $expected_commit" >&2
     exit 1
 fi
 mkdir -p "$target"
@@ -85,18 +93,28 @@ if ! diff "$listing.expected" "$listing" >&2; then
 fi
 echo "ok $(wc -l < "$listing.expected") files in sources.tar"
 
-tar --extract --gzip --directory "$work" --file "$target/licenses.tar.gz"
+# A directory of its own: this archive must not be able to overwrite the sources
+# that were just checked.
+unpacked="$work/license-archive"
+mkdir "$unpacked"
+tar --extract --gzip --directory "$unpacked" --file "$target/licenses.tar.gz"
 while IFS=$'\t' read -r name archive member; do
     if ! tar --extract --to-stdout --file "$work/sources/$archive" "$member" \
-        | cmp - "$work/licenses/$name"; then
+        | cmp - "$unpacked/licenses/$name"; then
         echo "license text $name differs from $archive $member" >&2
         exit 1
     fi
 done < <(tail -n +2 "$root/pins/licenses.tsv")
-(cd "$work/licenses" && find . -type f | sed 's|^\./||' | sort) > "$listing.licenses"
+for copy in "$work/sources/NOTICE.md" "$unpacked/licenses/NOTICE.md"; do
+    if ! cmp "$root/NOTICE.md" "$copy"; then
+        echo "a NOTICE.md inside an archive differs from this checkout" >&2
+        exit 1
+    fi
+done
+(cd "$unpacked" && find . -type f | sed 's|^\./||' | sort) > "$listing.licenses"
 {
-    tail -n +2 "$root/pins/licenses.tsv" | cut -f1
-    printf '%s\n' NOTICE.md
+    tail -n +2 "$root/pins/licenses.tsv" | cut -f1 | sed 's|^|licenses/|'
+    printf '%s\n' licenses/NOTICE.md
 } | sort > "$listing.licenses.expected"
 if ! diff "$listing.licenses.expected" "$listing.licenses" >&2; then
     echo "licenses.tar.gz holds other files than pins/licenses.tsv" >&2
