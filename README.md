@@ -13,9 +13,11 @@ Files are published unmodified, byte-for-byte equal to the upstream files.
 
 ## Where each file comes from
 
-Release [`2026.11.02`](https://github.com/Among-Terminal/appimage-tools/releases/tag/2026.11.02),
-verified on 2026-11-02. The same values are available in machine-readable form in `pins/tools.tsv`,
-which is what the scripts read.
+Release [`2026.11.02.1`](https://github.com/Among-Terminal/appimage-tools/releases/tag/2026.11.02.1),
+verified on 2026-11-02. Its tools are the same bytes as in release `2026.11.02`, which stays
+published; `2026.11.02.1` corrects `NOTICE.md` and is written in English. The same values are
+available in machine-readable form in `pins/tools.tsv`, which is what the scripts read. There the
+`url` column is the address the bytes are fetched from, and the other columns name their origin.
 
 | File | Source | Commit | Upstream file date | sha256 |
 |---|---|---|---|---|
@@ -27,9 +29,11 @@ which is what the scripts read.
 | `runtime-aarch64` | same | same | 2026-10-19 | `9a72a744d221576c9347ec074243acc5c3c7568896b12714e0e82e9f0bf47900` |
 | `linuxdeploy-plugin-gtk.sh` | [linuxdeploy-plugin-gtk](https://github.com/linuxdeploy/linuxdeploy-plugin-gtk/blob/7a3fbc31a9e5075073ff8790f26effbac5f84453/linuxdeploy-plugin-gtk.sh) | `7a3fbc31a9e5075073ff8790f26effbac5f84453` | 2026-07-02 | `b0f4cbc684a0103a9651f0955b635eaea0096b3a66c0f5a2c2aa337960375171` |
 
-The `continuous` tag for `runtime` was kept deliberately: as of 2026-11-02 upstream still served
-these bytes under it, while tag `20251108` contains a different build. The previously pinned
-`linuxdeploy` file from `continuous` was not found in any tag, so the latest tag was taken.
+`runtime` comes from `continuous` deliberately: as of 2026-11-02 upstream still served these bytes
+under it, while tag `20251108` contains a different build. Because `continuous` will move, the `url`
+column points `runtime` at our immutable release `2026.11.02`, where those bytes were verified
+against upstream. The previously pinned `linuxdeploy` file from `continuous` was not found in any
+tag, so the latest tag was taken.
 
 The release also contains:
 
@@ -37,7 +41,7 @@ The release also contains:
 |---|---|
 | `NOTICE.md` | what each file consists of, versions, licenses, the evidence for each version |
 | `licenses.tar.gz` | license texts taken from the source archives |
-| `sources.tar` | sources of all components; listed in `pins/sources.tsv` |
+| `sources.tar` | sources of the GPL and LGPL components and of nearly everything linked with them; listed in `pins/sources.tsv`, exceptions in `NOTICE.md` |
 | `SHA256SUMS` | checksums of all release files |
 
 ## Licenses
@@ -58,29 +62,35 @@ a new release.
 
 1. Choose an upstream version and check the licenses: the texts in its sources and the contents of
    the AppImage itself. It can be unpacked without running it: `unsquashfs -o <offset>`, where the
-   offset is the end of the ELF header.
+   offset is the end of the ELF section header table (`e_shoff + e_shentsize * e_shnum`).
 2. Open a PR in this repository: update `pins/tools.tsv`, `pins/sources.tsv`, `pins/licenses.tsv` and
-   `NOTICE.md`, and add a new table in this file.
-3. After merging, assemble the files and create a draft with a tag of the form `YYYY.MM.DD`:
+   `NOTICE.md`, and add a new table in this file. A tool whose upstream address no longer serves the
+   pinned bytes keeps them by pointing its `url` at an earlier release of this repository.
+3. From the PR head, assemble the files and create a draft targeting that commit. Tags have the form
+   `YYYY.MM.DD`; a second release on the same day takes the suffix `.1`, then `.2`, because a tag name
+   can never be reused:
 
    ```sh
    scripts/assemble-release.sh ~/.cache/appimage-tools/dist ~/.cache/appimage-tools/downloads
    gh release create <tag> --draft --repo Among-Terminal/appimage-tools \
-     --target main --title <tag> --notes-file <file> ~/.cache/appimage-tools/dist/*
+     --target "$(git rev-parse HEAD)" --title <tag> --notes-file <file> ~/.cache/appimage-tools/dist/*
    ```
 
-4. Verify the draft and only then publish it, because nothing can be fixed after publication:
+4. Verify the draft, merge the PR with a merge commit so the tagged commit stays in `main`, and only
+   then publish, because nothing can be fixed after publication:
 
    ```sh
    scripts/verify-release.sh <tag> ~/.cache/appimage-tools/verify-draft
    gh release edit <tag> --draft=false --repo Among-Terminal/appimage-tools
+   git fetch --tags
+   git checkout <tag>
    scripts/verify-release.sh <tag> ~/.cache/appimage-tools/verify-published
    ```
 
 5. In a separate PR to `Among-Terminal/among`, replace the release tag and sha256 in
-   `tools/among-tools/src/appimage_tools.rs`. The AppImage build in that PR's CI is the check of the
-   new version.
+   `tools/among-tools/src/appimage_tools.rs`, and the release link in the notice its AppImage carries.
+   The AppImage build in that PR's CI is the check of the new version.
 
-`verify-release.sh` compares the file list, `SHA256SUMS`, the pinned values and freshly downloaded
-upstream files, so it fails once a file is replaced upstream. Old releases keep working: `among` is
-pinned to its own tag.
+`verify-release.sh` checks the file list, the pinned values, every license text and the bytes at each
+pinned address. A release is verified from its own tag, since pins and `NOTICE.md` change later; the
+script refuses another checkout. Old releases keep working: `among` is pinned to its own tag.

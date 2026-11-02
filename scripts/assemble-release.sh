@@ -6,11 +6,13 @@
 # Every input is fetched from the address in pins/ and refused unless its
 # SHA-256 matches, so a run either yields exactly the reviewed bytes or stops.
 # The cache only spares repeated downloads; cached files are checked the same way.
+# A failed run removes its destination, so the same command can simply be repeated.
 set -euo pipefail
 export LC_ALL=C
+umask 022
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-dist="${1:?usage: assemble-release.sh <new-empty-dist-dir> [download-cache-dir]}"
+dist="$(realpath -m "${1:?usage: assemble-release.sh <new-empty-dist-dir> [download-cache-dir]}")"
 cache="${2:-}"
 
 if [[ -e "$dist" ]]; then
@@ -19,10 +21,18 @@ if [[ -e "$dist" ]]; then
 fi
 mkdir -p "$dist"
 staging="$(mktemp -d "$dist.staging.XXXXXX")"
-trap 'rm -rf "$staging"' EXIT
+finish() {
+    local status=$?
+    rm -rf "$staging"
+    if [[ "$status" -ne 0 ]]; then
+        rm -rf "$dist"
+    fi
+}
+trap finish EXIT
 if [[ -z "$cache" ]]; then
     cache="$staging/cache"
 fi
+cache="$(realpath -m "$cache")"
 mkdir -p "$cache"
 
 fetch() {
@@ -41,11 +51,12 @@ fetch() {
     cp "$cached" "$target"
 }
 
-# Stable archive flags: the same inputs give the same asset bytes on every run.
+# Order, owner, time and mode are all fixed, so the same inputs give the same
+# asset bytes whatever the umask and the modes of the download cache.
 pack() {
     local directory="$1" name="$2" output="$3"
     tar --create --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 \
-        --format=gnu --directory "$directory" --file "$output" "$name"
+        --mode=u=rwX,go=rX --format=gnu --directory "$directory" --file "$output" "$name"
 }
 
 while IFS=$'\t' read -r asset url _repository _tag _commit sha256 _published; do
