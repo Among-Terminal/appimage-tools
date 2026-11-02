@@ -5,16 +5,19 @@ The release files were not modified or rebuilt here: they are the same bytes ups
 the texts are provided separately in `licenses.tar.gz`, and the corresponding sources in `sources.tar`
 (listed with URLs and sha256 in `pins/sources.tsv`). Both archives are part of every release.
 
-Source code offer. Source code for the GPL and LGPL components (and the other components in the
-tables below) is provided together with the binaries from the same place: `sources.tar` of the same
-release. Build scripts are in the project repositories (`ci/`, `scripts/`), and Alpine and Debian
+Source code offer. Source code for the GPL and LGPL components is provided together with the
+binaries from the same place: `sources.tar` of the same release. It also holds the components in the
+tables below, except the Alpine 3.21 zlib, which is permissive; see the `runtime-*` section.
+Build scripts are in the project repositories (`ci/`, `scripts/`), and Alpine and Debian
 patches sit next to the source archives. Directories inside `sources.tar`:
 
 - `projects/`: project sources;
 - `debian-trixie-20251107/`: Debian packages (`.dsc`, `orig`, `debian`) from the
   snapshot.debian.org snapshot of 2025-11-07;
-- `alpine-3.19/`, `alpine-3.21/`: archives from distfiles.alpinelinux.org, and for 3.19 also the
+- `alpine-3.19/`, `alpine-3.21/`: archives from distfiles.alpinelinux.org. Alpine 3.19 also has the
   aports build files (commit `838df6872ddf3260a834ad304c71f5e03901bb06`, branch `3.19-stable`).
+  Alpine 3.21 has the build files of gcc only (commit `8f01bd5af18e4f66b7df105bdd7cab10de2ee1fa`,
+  branch `3.21-stable`); its other packages here (musl, zstd, mimalloc) are permissive.
 
 ## linuxdeploy (`linuxdeploy-*.AppImage`, tag `1-alpha-20251107-1`)
 
@@ -26,6 +29,7 @@ Built in the `debian:stable` image (trixie as of 2025-11-07); all programs are s
 | linuxdeploy-desktopfile, cmake-scripts, args | submodules `bea49b1`, `df32987`, `3de44ec` | MIT | commit tree |
 | patchelf (`usr/bin/patchelf`) | 0.15.0 | GPL-3.0-or-later | `ci/docker/install-static-patchelf.sh`, string in the binary |
 | strip from binutils (`usr/bin/strip`) | 2.35 | GPL-3.0-or-later | `ci/docker/install-static-binutils.sh` |
+| zlib inside `strip` | 1.2.11, from the binutils source tree | Zlib | string `inflate 1.2.11` in the binary, `zlib/zlib.h` in binutils 2.35 |
 | glibc | 2.41-12 | LGPL-2.1-or-later | Debian snapshot at the build date |
 | libstdc++, libgcc | gcc-14 14.2.0-19 | GPL-3.0 with GCC Runtime Library Exception | `.comment` of the binaries, Debian snapshot |
 | CImg | 3.5.2+dfsg-1 | CeCILL-C | `cimg-dev` in `ci/docker/Dockerfile`, Debian snapshot |
@@ -63,7 +67,6 @@ newer than the build, and `sources.tar` contains the r5 recipe in effect at the 
 | libidn2 | 2.3.4-r4 | LGPL-3.0-or-later or GPL-2.0-or-later |
 | libunistring | 1.1-r2 | LGPL-3.0-or-later or GPL-2.0-or-later |
 | libintl from gettext | 0.22.3-r0 | LGPL-2.1-or-later |
-| argp-standalone | 1.5.0-r1 | LGPL-2.0-or-later per file headers; the archive has no separate license file |
 | curl | 8.14.1-r2 | curl |
 | openssl | 3.1.8-r1 | Apache-2.0 |
 | nghttp2 | 1.58.0-r0 | MIT |
@@ -75,7 +78,10 @@ newer than the build, and `sources.tar` contains the r5 recipe in effect at the 
 | zlib | 1.3.1-r0 | Zlib |
 | zstd | 1.5.5-r8 | BSD-3-Clause or GPL-2.0-only |
 | musl | 1.2.4_git20230717-r5 | MIT |
-| libgcc | gcc 13.2.1_git20231014-r0 | GPL-3.0 with GCC Runtime Library Exception |
+| libstdc++, libgcc | gcc 13.2.1_git20231014-r0 | GPL-3.0 with GCC Runtime Library Exception |
+
+libstdc++ is linked into `usr/bin/appimagetool` only. `argp-standalone` is a build dependency of
+appimagetool, but none of the four programs contains its code; its archive stays in `sources.tar`.
 
 ## Embedded AppImage header and `runtime-*`
 
@@ -96,6 +102,7 @@ Every AppImage image starts with type2-runtime. These are different builds of on
 | musl | 1.2.5-r11 | MIT |
 | zstd | 1.5.6-r2 | BSD-3-Clause or GPL-2.0-only |
 | zlib | the log shows 1.3.2-r1 for `fedfad5` | Zlib |
+| libgcc, aarch64 builds only | gcc 14.2.0-r4 | GPL-3.0 with GCC Runtime Library Exception |
 
 Alpine versions are taken from the `fedfad5` build log. The build logs of `caf24f9` and `61e6688`
 have already been deleted on GitHub, so the revisions of their Alpine 3.21 packages are unconfirmed.

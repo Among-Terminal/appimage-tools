@@ -3,10 +3,14 @@
 #
 # Usage: scripts/verify-release.sh <tag> <new-empty-directory>
 #
-# Passing means three independent things: the asset list is exactly the expected
-# one, every asset matches SHA256SUMS, and every tool and source archive matches
-# its pin. For a tool the upstream asset is fetched again and compared as well, so
-# a later change at the upstream address shows up here as a failure.
+# Run it from the checkout that assembled the release: a published tag has to be
+# checked out first, because pins and NOTICE.md change between releases.
+#
+# Passing means the asset list is exactly the expected one, every tool and source
+# archive matches its pin, every license text equals the member of the source
+# archive named in pins/licenses.tsv, and the asset at each pinned address is
+# still the same. SHA256SUMS comes from the release itself, so it only shows that
+# the release agrees with itself; the pins are the independent reference.
 set -euo pipefail
 export LC_ALL=C
 
@@ -17,6 +21,19 @@ repository=Among-Terminal/appimage-tools
 
 if [[ -e "$target" ]]; then
     echo "destination must be new: $target" >&2
+    exit 1
+fi
+if [[ -n "$(git -C "$root" status --porcelain)" ]]; then
+    echo "the checkout has local changes" >&2
+    exit 1
+fi
+expected_commit="$(gh release view "$tag" --repo "$repository" --json targetCommitish \
+    --jq .targetCommitish)"
+if [[ ! "$expected_commit" =~ ^[0-9a-f]{40}$ ]]; then
+    expected_commit="$(gh api "repos/$repository/commits/refs/tags/$tag" --jq .sha)"
+fi
+if [[ "$expected_commit" != "$(git -C "$root" rev-parse HEAD)" ]]; then
+    echo "run this from the commit of $tag: git checkout $expected_commit" >&2
     exit 1
 fi
 mkdir -p "$target"
@@ -41,31 +58,31 @@ if ! cmp "$root/NOTICE.md" "$target/NOTICE.md"; then
     exit 1
 fi
 
-upstream="$(mktemp -d "$target.upstream.XXXXXX")"
-trap 'rm -rf "$upstream"' EXIT
+work="$(mktemp -d "$target.work.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
 while IFS=$'\t' read -r asset url _repository _tag _commit sha256 _published; do
     if [[ "$(sha256sum "$target/$asset" | cut -d' ' -f1)" != "$sha256" ]]; then
         echo "$asset differs from its pin" >&2
         exit 1
     fi
     curl --fail --location --silent --show-error --retry 3 --proto '=https' \
-        --proto-redir '=https' --output "$upstream/$asset" "$url"
-    if ! cmp "$target/$asset" "$upstream/$asset"; then
-        echo "$asset differs from the upstream asset" >&2
+        --proto-redir '=https' --output "$work/$asset" "$url"
+    if ! cmp "$target/$asset" "$work/$asset"; then
+        echo "$asset differs from the pinned address" >&2
         exit 1
     fi
     echo "ok $sha256 $asset"
 done < <(tail -n +2 "$root/pins/tools.tsv")
 
-listing="$upstream/listing"
-tar --extract --directory "$upstream" --file "$target/sources.tar"
+listing="$work/listing"
+tar --extract --directory "$work" --file "$target/sources.tar"
 while IFS=$'\t' read -r path _url sha256; do
-    if [[ "$(sha256sum "$upstream/sources/$path" | cut -d' ' -f1)" != "$sha256" ]]; then
+    if [[ "$(sha256sum "$work/sources/$path" | cut -d' ' -f1)" != "$sha256" ]]; then
         echo "$path differs from its pin" >&2
         exit 1
     fi
 done < <(tail -n +2 "$root/pins/sources.tsv")
-(cd "$upstream/sources" && find . -type f | sed 's|^\./||' | sort) > "$listing"
+(cd "$work/sources" && find . -type f | sed 's|^\./||' | sort) > "$listing"
 {
     tail -n +2 "$root/pins/sources.tsv" | cut -f1
     printf '%s\n' NOTICE.md sources.tsv
@@ -75,5 +92,32 @@ if ! diff "$listing.expected" "$listing" >&2; then
     exit 1
 fi
 echo "ok $(wc -l < "$listing.expected") files in sources.tar"
-tar --list --gzip --file "$target/licenses.tar.gz" > "$listing.licenses"
-echo "ok $(grep -cv '/$' "$listing.licenses") files in licenses.tar.gz"
+
+# A directory of its own: this archive must not be able to overwrite the sources
+# that were just checked.
+unpacked="$work/license-archive"
+mkdir "$unpacked"
+tar --extract --gzip --directory "$unpacked" --file "$target/licenses.tar.gz"
+while IFS=$'\t' read -r name archive member; do
+    if ! tar --extract --to-stdout --file "$work/sources/$archive" "$member" \
+        | cmp - "$unpacked/licenses/$name"; then
+        echo "license text $name differs from $archive $member" >&2
+        exit 1
+    fi
+done < <(tail -n +2 "$root/pins/licenses.tsv")
+for copy in "$work/sources/NOTICE.md" "$unpacked/licenses/NOTICE.md"; do
+    if ! cmp "$root/NOTICE.md" "$copy"; then
+        echo "a NOTICE.md inside an archive differs from this checkout" >&2
+        exit 1
+    fi
+done
+(cd "$unpacked" && find . -type f | sed 's|^\./||' | sort) > "$listing.licenses"
+{
+    tail -n +2 "$root/pins/licenses.tsv" | cut -f1 | sed 's|^|licenses/|'
+    printf '%s\n' licenses/NOTICE.md
+} | sort > "$listing.licenses.expected"
+if ! diff "$listing.licenses.expected" "$listing.licenses" >&2; then
+    echo "licenses.tar.gz holds other files than pins/licenses.tsv" >&2
+    exit 1
+fi
+echo "ok $(wc -l < "$listing.licenses") files in licenses.tar.gz"
